@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { TOKEN_SECRET, verifyToken } = require("../middlewares/jwt-validate");
-
+const db = require("../db");
 const { listaDeTareas } = require("./inscriptos");
 
 const router = express.Router();
@@ -20,9 +20,14 @@ router.post("/registro", async (req, res) => {
       return;
     }
 
-    const existeUser = usuarios.find((u) => {
-      return u.mail === req.body.mail;
-    });
+    const usuarioBd = await db.query(
+      "Select * from users where mail = $1",
+       [req.body.mail]
+    );
+
+    const existeUser = usuarioBd.rowCount > 0;
+
+
 
     if (existeUser) {
       res.status(400).json({ success: false, message: "Mail repetido" });
@@ -38,6 +43,11 @@ router.post("/registro", async (req, res) => {
       mail: req.body.mail,
       password: password,
     };
+
+    await db.query(
+      "Insert into users(name, mail, password) values ($1, $2, $3)",
+      [newUser.name, newUser.mail, newUser.password]
+    );
 
     usuarios.push(newUser);
 
@@ -75,17 +85,14 @@ router.post("/login", async (req, res) => {
     error: null,
     data: "Login exitoso",
     token,
-    listaDeTareas: listaDeTareas,
   });
 });
 
-//Listar usuarios solo puede ser consumida por alguien autorizado
-router.get("/usuarios", verifyToken, (req, res) => {
-  // Podemos acceder a los datos del usuario que hizo la request
-  // Segun el JWT que envio en los headers de la request
-  console.log(req.user);
 
-  res.json({ error: null, usuarios });
+router.get("/usuarios", async (req, res) => {
+  const users = await db.query("Select * from users");
+  const result = users.rows;
+  res.json({ error: null, result });
 });
 
 module.exports = router;
